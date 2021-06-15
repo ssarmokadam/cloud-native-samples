@@ -1,0 +1,166 @@
+:toc: macro
+
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+toc::[]
+:idprefix:
+:idseparator: -
+:reproducible:
+:source-highlighter: rouge
+:listing-caption: Listing
+
+= Spring-native in devon4j
+
+This document mainly aims to document the finding after we integrate spring-native experimental dependency with devon4j sample application.I have created two application:
+* demo application: spring boot vanilla application with spring-native experimental dependency.
+* devon4j-cloud-native application: devon4j sample application with spring-native experimental dependency.
+
+== demo application
+
+demo application is generated using start.spring.io. with spring-boot version 2.5.0 and Java 11. We are able to build and run it successfully.
+
+To build image we used command mvn spring-boot:build-image
+
+
+== devon4j-cloud-native application
+
+To create cloud-native application with devon4j we have followed below steps:
+
+* Create devon4j sample application using latest version(devon4j version 2021.04.002) of devon4j-template-server maven archetype. It uses spring boot version 2.4.4
+
+* Run mvn clean install build should be successful. Run application and try it to login with username and password as user. User should be able to login.
+
+* Now, lets add spring-native dependencies.
+We have added below dependency in main project pom.xml
+
+		<dependency>
+			<groupId>org.springframework.experimental</groupId>
+			<artifactId>spring-native</artifactId>
+			<version>${spring-native.version}</version>
+		</dependency>
+		
+	<repositories>
+		<repository>
+			<id>spring-snapshots</id>
+			<name>Spring Snapshots</name>
+			<url>https://repo.spring.io/snapshot</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+		</repository>
+	</repositories>
+	
+In core/pom.xml add below plugins and pluginsRepository
+	
+    <build>
+      <plugins>
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+          <configuration>
+            <image>
+              <builder>paketobuildpacks/builder:tiny</builder>
+              <env>
+                <BP_NATIVE_IMAGE>true</BP_NATIVE_IMAGE>
+              </env>
+            </image>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.springframework.experimental</groupId>
+          <artifactId>spring-aot-maven-plugin</artifactId>
+          <version>${spring-native.version}</version>
+          <executions>
+            <execution>
+              <id>test-generate</id>
+              <goals>
+                <goal>test-generate</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>generate</id>
+              <goals>
+                <goal>generate</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.hibernate.orm.tooling</groupId>
+          <artifactId>hibernate-enhance-maven-plugin</artifactId>
+          <version>${hibernate.version}</version>
+          <executions>
+            <execution>
+              <id>enhance</id>
+              <goals>
+                <goal>enhance</goal>
+              </goals>
+              <configuration>
+                <failOnError>true</failOnError>
+                <enableLazyInitialization>true</enableLazyInitialization>
+                <enableDirtyTracking>true</enableDirtyTracking>
+                <enableAssociationManagement>true</enableAssociationManagement>
+                <enableExtendedEnhancement>false</enableExtendedEnhancement>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
+      </plugins>
+    </build>
+	
+	<pluginRepositories>
+		<pluginRepository>
+			<id>spring-snapshots</id>
+			<name>Spring Snapshots</name>
+			<url>https://repo.spring.io/snapshot</url>
+		</pluginRepository>
+	</pluginRepositories>
+	
+Error occured:
+mvn clean build is failing with below error:
+	
+----
+
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for devon4j-cloud-native 0.0.1-SNAPSHOT:
+[INFO]
+[INFO] devon4j-cloud-native ............................... SUCCESS [  1.897 s]
+[INFO] devon4j-cloud-native-api ........................... SUCCESS [ 10.149 s]
+[INFO] devon4j-cloud-native-core .......................... FAILURE [ 15.370 s]
+[INFO] devon4j-cloud-native-server ........................ SKIPPED
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  28.064 s
+[INFO] Finished at: 2021-06-15T12:30:37+05:30
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.springframework.experimental:spring-aot-maven-plugin:0.9.2:test-generate (test-generate) on project devon4j-cloud-native-core: Build failed during Spring AOT test code generation: Unable to execute mojo: Compilation failure:
+[ERROR] /C:/idelatest/workspaces/main/cloud-native-samples/devon4j-cloud-native/core/target/generated-test-sources/spring-aot/src/test/java/org/springframework/aot/StaticSpringFactories.java:[44,90] lambda expressions are not supported in -source 6
+[ERROR]   (use -source 8 or higher to enable lambda expressions)
+[ERROR] /C:/idelatest/workspaces/main/cloud-native-samples/devon4j-cloud-native/core/target/generated-test-sources/spring-aot/src/test/java/org/springframework/core/io/support/SpringFactoriesLoader.java:[45,46] diamond operator is not supported in -source 6
+[ERROR]   (use -source 7 or higher to enable diamond operator)
+[ERROR] -> [Help 1]
+[ERROR]
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR]
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+[ERROR]
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <args> -rf :devon4j-cloud-native-core
+
+----
+
+Reference issue:
+
+https://github.com/spring-projects-experimental/spring-native/issues/593
+
+
+
